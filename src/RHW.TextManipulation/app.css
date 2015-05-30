@@ -1,0 +1,30 @@
+﻿body {
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 14px;
+}
+
+textarea {
+    height: 80px;
+    overflow: auto;
+    width: 300px;
+}
+
+select {
+    width: 200px;
+}
+
+#transformInput {
+    height: 180px;
+    overflow: auto;
+    width: 80%;
+    margin: auto;
+}
+
+.hidden {
+    display: none;
+}
+
+#inputForm label {
+    display: inline-block;
+    width: 160px;
+}

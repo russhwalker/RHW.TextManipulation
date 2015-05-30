@@ -1,0 +1,6 @@
+C:\Dev\RHW.TextManipulation\src\RHW.TextManipulation\bin\RHW.TextManipulation.dll.config
+C:\Dev\RHW.TextManipulation\src\RHW.TextManipulation\bin\RHW.TextManipulation.dll
+C:\Dev\RHW.TextManipulation\src\RHW.TextManipulation\bin\RHW.TextManipulation.pdb
+C:\Dev\RHW.TextManipulation\src\RHW.TextManipulation\obj\Debug\RHW.TextManipulation.csprojResolveAssemblyReference.cache
+C:\Dev\RHW.TextManipulation\src\RHW.TextManipulation\obj\Debug\RHW.TextManipulation.dll
+C:\Dev\RHW.TextManipulation\src\RHW.TextManipulation\obj\Debug\RHW.TextManipulation.pdb
