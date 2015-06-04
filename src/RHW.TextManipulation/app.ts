@@ -352,9 +352,20 @@ module WebApp {
         HtmlHelper.showElementsByClassName(locationClassName);
     }
 
-    export function ruleTypeChange(): void {
+    export function ruleTypeChange(): boolean {
+
+        var liWrapper = (<HTMLAnchorElement>this).parentNode;
+        var ruleTypeListItems: NodeList = liWrapper.parentNode.childNodes;
+        for (var i = 0; i < ruleTypeListItems.length; i++){
+            var childItem = <HTMLLIElement>ruleTypeListItems[i];
+            if (childItem && childItem.classList) {
+                childItem.classList.remove('active');
+            }
+        }
+        (<HTMLLIElement>liWrapper).classList.add('active');
+
         HtmlHelper.hideElementsByClassName('field-wrapper');
-        var ruleTypeText = HtmlHelper.getSelectedValueByName('ruleType');
+        var ruleTypeText: string = this.dataset.ruletype;
         var ruleType = <StringTransform.RuleType>StringTransform.RuleType[ruleTypeText];
         var className = 'ruleType-' + ruleTypeText;
         HtmlHelper.showElementsByClassName(className);
@@ -364,6 +375,7 @@ module WebApp {
                 insertRuleLocationChange();
                 break;
         }
+        return false;
     }
 
     export module Views {
@@ -612,10 +624,12 @@ module WebApp {
         document.getElementById('btnFormatJSON').onclick = QuickRules.formatJSON;
 
         document.getElementById(Views.InsertView.insertRuleLocation).onchange = WebApp.insertRuleLocationChange;
-        var ruleTypeRadios = document.getElementsByName('ruleType');
-        for (var i = 0; i < ruleTypeRadios.length; i++) {
-            (<HTMLInputElement>ruleTypeRadios[i]).onclick = WebApp.ruleTypeChange;
+
+        var ruleTypeItems = document.getElementsByClassName('ruleType');
+        for (var i = 0; i < ruleTypeItems.length; i++) {
+            (<HTMLAnchorElement>ruleTypeItems[i]).onclick = WebApp.ruleTypeChange;
         }
+
     }
 
 }

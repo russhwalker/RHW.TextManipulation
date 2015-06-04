@@ -364,8 +364,17 @@ var WebApp;
     }
     WebApp.insertRuleLocationChange = insertRuleLocationChange;
     function ruleTypeChange() {
+        var liWrapper = this.parentNode;
+        var ruleTypeListItems = liWrapper.parentNode.childNodes;
+        for (var i = 0; i < ruleTypeListItems.length; i++) {
+            var childItem = ruleTypeListItems[i];
+            if (childItem && childItem.classList) {
+                childItem.classList.remove('active');
+            }
+        }
+        liWrapper.classList.add('active');
         HtmlHelper.hideElementsByClassName('field-wrapper');
-        var ruleTypeText = HtmlHelper.getSelectedValueByName('ruleType');
+        var ruleTypeText = this.dataset.ruletype;
         var ruleType = StringTransform.RuleType[ruleTypeText];
         var className = 'ruleType-' + ruleTypeText;
         HtmlHelper.showElementsByClassName(className);
@@ -374,6 +383,7 @@ var WebApp;
                 insertRuleLocationChange();
                 break;
         }
+        return false;
     }
     WebApp.ruleTypeChange = ruleTypeChange;
     var Views;
@@ -610,9 +620,9 @@ var WebApp;
         document.getElementById('btnTrimLines').onclick = QuickRules.runTrimLines;
         document.getElementById('btnFormatJSON').onclick = QuickRules.formatJSON;
         document.getElementById(Views.InsertView.insertRuleLocation).onchange = WebApp.insertRuleLocationChange;
-        var ruleTypeRadios = document.getElementsByName('ruleType');
-        for (var i = 0; i < ruleTypeRadios.length; i++) {
-            ruleTypeRadios[i].onclick = WebApp.ruleTypeChange;
+        var ruleTypeItems = document.getElementsByClassName('ruleType');
+        for (var i = 0; i < ruleTypeItems.length; i++) {
+            ruleTypeItems[i].onclick = WebApp.ruleTypeChange;
         }
     }
     WebApp.setup = setup;

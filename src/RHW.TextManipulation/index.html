@@ -75,15 +75,14 @@
 
                 <div>
                     <h4>Rules:</h4>
-
-                    <input type="radio" id="ruleTypeReplace" name="ruleType" value="Replace" class="" /><label for="ruleTypeReplace">Replace</label>
-                    &nbsp;&nbsp;
-                    <input type="radio" id="ruleTypeRemove" name="ruleType" value="Remove" class="" /><label for="ruleTypeRemove">Remove</label>
-                    &nbsp;&nbsp;
-                    <input type="radio" id="ruleTypeInsert" name="ruleType" value="Insert" class="" /><label for="ruleTypeInsert">Insert</label>
-
+                    <ul class="nav nav-pills">
+                        <li role="presentation" class=""><a data-ruletype="Replace" class="ruleType" href="#">Replace</a></li>
+                        <li role="presentation" class=""><a data-ruletype="Remove" class="ruleType" href="#">Remove</a></li>
+                        <li role="presentation" class=""><a data-ruletype="Insert" class="ruleType" href="#">Insert</a></li>
+                    </ul>
                     <div id="rules"></div>
                 </div>
+
                 <button id="btnTransform" class="btn btn-primary">TRANSFORM TEXT</button>
             </form>
         </div>

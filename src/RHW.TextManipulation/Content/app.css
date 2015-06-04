@@ -14,7 +14,7 @@
 }
 
 #inputForm #rules {
-    border: solid 1px #808080;
+    background-color: #808080;
     padding: 8px;
     margin-bottom: 20px;
 }
