@@ -1,7 +1,8 @@
 ﻿module StringTransform {
 
     export enum RuleType { Remove, Replace, Insert }
-    export enum RuleLocation { Start, End, Global, BeforeSpecifiedString, AfterSpecifiedString, AtSpecificLocation, OnNewLine }
+
+    export enum RuleLocation { Start, End, Global, BeforeSpecifiedString, AfterSpecifiedString, AtSpecificLocation, OnNewLine, FirstOccurrence, LastOccurrence }
 
     export class DetailedLocation {
         constructor(public ruleLocation: RuleLocation = RuleLocation.Global,
@@ -48,19 +49,22 @@
     }
 
     export class StringRule {
-
         constructor(public ruleType: RuleType, public ruleParams: IRuleParams) {
         }
 
         private applyRemove(inputString: string): string {
             var removeParams = <RemoveParams>this.ruleParams;
             switch (removeParams.detailedLocation.ruleLocation) {
-                case RuleLocation.End:
-                    removeParams.searchValue += '$';
-                case RuleLocation.Start:
-                    return StringManip.applyRegEx(inputString, removeParams.searchValue, '', false, true);
                 case RuleLocation.Global:
                     return StringManip.applyRegEx(inputString, removeParams.searchValue, '', true, true);
+                case RuleLocation.FirstOccurrence:
+                    return StringManip.applyRegEx(inputString, removeParams.searchValue, '', false, true);
+                case RuleLocation.LastOccurrence:
+                    var stringLocations = StringManip.getStringIndexes(inputString, removeParams.searchValue);
+                    if (stringLocations && stringLocations.length > 0) {
+                        var lastOccurrence = stringLocations.slice(-1);
+                        return StringManip.removeStrings(inputString, removeParams.searchValue, lastOccurrence);
+                    }
             }
             return inputString;
         }
@@ -117,18 +121,26 @@
     }
 
     export class RuleSet {
-
         constructor(public stringRules: StringRule[] = []) {
         }
 
         apply(inputString: string): string {
-            var result = inputString;
-            for (var j = 0; j < this.stringRules.length; j++) {
-                var sr = this.stringRules[j];
-                var stringRule = new StringRule(sr.ruleType, sr.ruleParams);
-                result = stringRule.apply(result);
+            var lines = LineHelper.parseLines(inputString);
+            var resultLines: string[] = [];
+
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i];
+
+                for (var j = 0; j < this.stringRules.length; j++) {
+                    var sr = this.stringRules[j];
+                    var stringRule = new StringRule(sr.ruleType, sr.ruleParams);
+                    line = stringRule.apply(line);
+                }
+
+                resultLines.push(line);
             }
-            return result;
+
+            return resultLines.join(LineHelper.lineEnding);
         }
     }
 
@@ -183,11 +195,24 @@ module StringManip {
         return result;
     }
 
+    export function removeStrings(inputString: string, stringToRemove: string, locations: number[]): string {
+        var result = inputString;
+        var locationChange = 0;
+        for (var i = 0; i < locations.length; i++) {
+            var location = locations[i];
+            var before = result.substring(0, location);
+            var after = result.substring(location + stringToRemove.length);
+            result = before + after;
+            locationChange -= stringToRemove.length;
+        }
+        return result;
+    }
+
 }
 
 module LineHelper {
 
-    var lineEnding = '\r\n';
+    export var lineEnding = '\r\n';
 
     export function parseLines(rawInput: string): string[] {
         var lines = rawInput.split(lineEnding);
@@ -207,6 +232,16 @@ module LineHelper {
             if (line.indexOf(afterLineWithText, line.length - afterLineWithText.length) !== -1) {
                 resultLines.push(newLineText);
             }
+        }
+        return resultLines.join(lineEnding);
+    }
+
+    export function trimLines(input: string) {
+        var lines = input.split(lineEnding);
+        var resultLines: string[] = [];
+        for (var i = 0; i < lines.length; i++) {
+            var line = removeLineBreak(lines[i]);
+            resultLines.push(line.trim());
         }
         return resultLines.join(lineEnding);
     }
@@ -246,6 +281,8 @@ module HtmlHelper {
 
 module WebApp {
 
+    var transformInputId: string = 'transformInput';
+
     export class InputResult {
         constructor(public validated: boolean, public params: StringTransform.IRuleParams) {
 
@@ -265,8 +302,9 @@ module WebApp {
                 break;
             case StringTransform.RuleType.Remove:
                 var removeView = new Views.RemoveView();
-                params = new StringTransform.RemoveParams(detailedLocation,
-                    removeView.getInputFieldValue(removeView.removeText));
+                var removeRuleLocationText = removeView.getInputFieldValue(Views.RemoveView.removeRuleLocation);
+                detailedLocation.ruleLocation = StringTransform.RuleLocation[removeRuleLocationText];
+                params = new StringTransform.RemoveParams(detailedLocation, removeView.getInputFieldValue(removeView.removeText));
                 break;
             case StringTransform.RuleType.Insert:
                 var insertView = new Views.InsertView();
@@ -277,13 +315,12 @@ module WebApp {
                 var insertLocation = insertView.getInputFieldValue(insertView.insertLocation);
                 detailedLocation.specificLocationIndex = parseInt(insertLocation);
                 detailedLocation.onNewLineAfterText = insertView.getInputFieldValue(insertView.insertNewLinesAfterText);
-                params = new StringTransform.InsertParams(detailedLocation,
-                    insertView.getInputFieldValue(insertView.insertText));
+                params = new StringTransform.InsertParams(detailedLocation, insertView.getInputFieldValue(insertView.insertText));
                 break;
         }
 
         validated = true;
-
+        //todo validation
         return new InputResult(validated, params);
     }
 
@@ -301,7 +338,7 @@ module WebApp {
         rules.push(stringRule);
 
         var ruleSet = new StringTransform.RuleSet(rules);
-        var transformInput: HTMLTextAreaElement = <HTMLTextAreaElement>document.getElementById('transformInput');
+        var transformInput: HTMLTextAreaElement = <HTMLTextAreaElement>document.getElementById(transformInputId);
         var result: string = ruleSet.apply(transformInput.innerText);
         transformInput.innerText = result;
 
@@ -321,13 +358,17 @@ module WebApp {
         var ruleType = <StringTransform.RuleType>StringTransform.RuleType[ruleTypeText];
         var className = 'ruleType-' + ruleTypeText;
         HtmlHelper.showElementsByClassName(className);
-        if (ruleType === StringTransform.RuleType.Insert) {
-            insertRuleLocationChange();
+
+        switch (ruleType) {
+            case StringTransform.RuleType.Insert:
+                insertRuleLocationChange();
+                break;
         }
     }
 
     export module Views {
-        export enum InputType { Text, Number, TextArea, RuleLocationSelect }
+
+        export enum InputType { Text, Number, TextArea, RuleLocationSelect, RemoveLocationSelect }
 
         export interface IInputView {
             inputFields: InputField[];
@@ -337,15 +378,18 @@ module WebApp {
         export class BaseView implements IInputView {
             constructor(public ruleType: StringTransform.RuleType, public inputFields: InputField[] = []) {
             }
+
             appendToForm(): void {
-                var form = document.getElementById('inputForm');
+                var form = document.getElementById('rules');
                 for (var i = 0; i < this.inputFields.length; i++) {
                     form.appendChild(this.inputFields[i].render());
                 }
             }
+
             getInputFieldValue(id: string) {
                 for (var i = 0; i < this.inputFields.length; i++) {
-                    if (this.inputFields[i].id === id) {
+                    var inputField = this.inputFields[i];
+                    if (inputField.id === id) {
                         return this.inputFields[i].getValue();
                     }
                 }
@@ -369,54 +413,88 @@ module WebApp {
                 switch (this.inputType) {
                     case InputType.Text:
                         var text = document.createElement('input');
+                        text.className = 'form-control';
                         text.id = this.id;
                         text.type = 'text';
                         fieldWrapper.appendChild(text);
                         break;
                     case InputType.Number:
                         var numberText = document.createElement('input');
+                        numberText.className = 'form-control';
                         numberText.id = this.id;
                         numberText.type = 'number';
                         fieldWrapper.appendChild(numberText);
                         break;
                     case InputType.TextArea:
                         var textArea = document.createElement('textarea');
+                        textArea.className = 'form-control';
                         textArea.id = this.id;
                         fieldWrapper.appendChild(textArea);
                         break;
                     case InputType.RuleLocationSelect:
                         var ruleLocationSelect = document.createElement('select');
+                        ruleLocationSelect.className = 'form-control';
                         ruleLocationSelect.id = this.id;
                         var defaultOption = document.createElement('option');
                         defaultOption.innerText = '--Select--';
                         defaultOption.value = '';
                         defaultOption.selected = true;
                         ruleLocationSelect.appendChild(defaultOption);
+
                         var optionStart = document.createElement('option');
                         optionStart.innerText = 'Start';
                         optionStart.value = StringTransform.RuleLocation[StringTransform.RuleLocation.Start];
                         ruleLocationSelect.appendChild(optionStart);
+
                         var optionEnd = document.createElement('option');
                         optionEnd.innerText = 'End';
                         optionEnd.value = StringTransform.RuleLocation[StringTransform.RuleLocation.End];
                         ruleLocationSelect.appendChild(optionEnd);
+
                         var optionBeforeSpecText = document.createElement('option');
                         optionBeforeSpecText.innerText = 'Before Specific Text';
                         optionBeforeSpecText.value = StringTransform.RuleLocation[StringTransform.RuleLocation.BeforeSpecifiedString];
                         ruleLocationSelect.appendChild(optionBeforeSpecText);
+
                         var optionAfterSpecText = document.createElement('option');
                         optionAfterSpecText.innerText = 'After Specific Text';
                         optionAfterSpecText.value = StringTransform.RuleLocation[StringTransform.RuleLocation.AfterSpecifiedString];
                         ruleLocationSelect.appendChild(optionAfterSpecText);
+
                         var optionAtSpecLoc = document.createElement('option');
                         optionAtSpecLoc.innerText = 'At Specific Number Location';
                         optionAtSpecLoc.value = StringTransform.RuleLocation[StringTransform.RuleLocation.AtSpecificLocation];
                         ruleLocationSelect.appendChild(optionAtSpecLoc);
+
                         var optionOnNewLine = document.createElement('option');
                         optionOnNewLine.innerText = 'On A New Line';
                         optionOnNewLine.value = StringTransform.RuleLocation[StringTransform.RuleLocation.OnNewLine];
                         ruleLocationSelect.appendChild(optionOnNewLine);
+
                         fieldWrapper.appendChild(ruleLocationSelect);
+                        break;
+                    case InputType.RemoveLocationSelect:
+                        var removeLocationSelect = document.createElement('select');
+                        removeLocationSelect.className = 'form-control';
+                        removeLocationSelect.id = this.id;
+
+                        var defaultRemoveOption = document.createElement('option');
+                        defaultRemoveOption.innerText = 'Anywhere/Global';
+                        defaultRemoveOption.value = StringTransform.RuleLocation[StringTransform.RuleLocation.Global];
+                        defaultRemoveOption.selected = true;
+                        removeLocationSelect.appendChild(defaultRemoveOption);
+
+                        var removeOptionFirstOcc = document.createElement('option');
+                        removeOptionFirstOcc.innerText = 'First Occurrence';
+                        removeOptionFirstOcc.value = StringTransform.RuleLocation[StringTransform.RuleLocation.FirstOccurrence];
+                        removeLocationSelect.appendChild(removeOptionFirstOcc);
+
+                        var removeOptionLastOcc = document.createElement('option');
+                        removeOptionLastOcc.innerText = 'Last Occurrence';
+                        removeOptionLastOcc.value = StringTransform.RuleLocation[StringTransform.RuleLocation.LastOccurrence];
+                        removeLocationSelect.appendChild(removeOptionLastOcc);
+
+                        fieldWrapper.appendChild(removeLocationSelect);
                         break;
                 }
 
@@ -431,6 +509,7 @@ module WebApp {
                     case InputType.TextArea:
                         return (<HTMLTextAreaElement>document.getElementById(this.id)).value;
                     case InputType.RuleLocationSelect:
+                    case InputType.RemoveLocationSelect:
                         return (<HTMLSelectElement>document.getElementById(this.id)).value;
                 }
                 return '';
@@ -439,9 +518,12 @@ module WebApp {
 
         export class RemoveView extends BaseView {
             removeText: string = 'removeText';
+            static removeRuleLocation: string = 'removeRuleLocation';
             constructor() {
                 super(StringTransform.RuleType.Remove);
-                var removeStringField = new InputField(this.ruleType, this.removeText, 'Remove Text:', InputType.TextArea);
+                var removeLocationSelect = new InputField(this.ruleType, RemoveView.removeRuleLocation, 'Location:', InputType.RemoveLocationSelect);
+                this.inputFields.push(removeLocationSelect);
+                var removeStringField = new InputField(this.ruleType, this.removeText, 'Remove This Text:', InputType.TextArea);
                 this.inputFields.push(removeStringField);
             }
         }
@@ -451,7 +533,7 @@ module WebApp {
             replaceWithText: string = 'replaceWithText';
             constructor() {
                 super(StringTransform.RuleType.Replace);
-                var replaceStringField = new InputField(this.ruleType, this.replaceText, 'Replace Text:', InputType.TextArea);
+                var replaceStringField = new InputField(this.ruleType, this.replaceText, 'Replace This Text:', InputType.TextArea);
                 this.inputFields.push(replaceStringField);
                 var replaceWithStringField = new InputField(this.ruleType, this.replaceWithText, 'Replace With:', InputType.TextArea);
                 this.inputFields.push(replaceWithStringField);
@@ -467,7 +549,7 @@ module WebApp {
             insertNewLinesAfterText: string = 'insertNewLinesAfterText';
             constructor() {
                 super(StringTransform.RuleType.Insert);
-                var insertStringField = new InputField(this.ruleType, this.insertText, 'Insert Text:', InputType.TextArea);
+                var insertStringField = new InputField(this.ruleType, this.insertText, 'Insert This Text:', InputType.TextArea);
                 this.inputFields.push(insertStringField);
 
                 var ruleLocationSelect = new InputField(this.ruleType, InsertView.insertRuleLocation, 'Location:', InputType.RuleLocationSelect);
@@ -494,6 +576,23 @@ module WebApp {
 
     }
 
+    export module QuickRules {
+
+        export function runTrimLines(): boolean {
+            var transformInput: HTMLTextAreaElement = <HTMLTextAreaElement>document.getElementById(transformInputId);
+            transformInput.innerText = LineHelper.trimLines(transformInput.innerText);
+            return false;
+        }
+
+        export function formatJSON(): boolean {
+            var transformInput: HTMLTextAreaElement = <HTMLTextAreaElement>document.getElementById(transformInputId);
+            var obj = JSON.parse(transformInput.innerText);
+            transformInput.innerText = JSON.stringify(obj, null, 2);
+            return false;
+        }
+
+    }
+
     function render() {
 
         var removeView = new Views.RemoveView();
@@ -505,22 +604,20 @@ module WebApp {
         var insertView = new Views.InsertView();
         insertView.appendToForm();
 
-        var form = document.getElementById('inputForm');
-        var btn = document.createElement('button');
-        btn.id = 'btnTransform';
-        btn.innerText = 'RUN';
-        form.appendChild(btn);
     }
 
     export function setup() {
         render();
-        document.getElementById('btnTransform').onclick = WebApp.runTransformation;
+        document.getElementById('btnTrimLines').onclick = QuickRules.runTrimLines;
+        document.getElementById('btnFormatJSON').onclick = QuickRules.formatJSON;
+
         document.getElementById(Views.InsertView.insertRuleLocation).onchange = WebApp.insertRuleLocationChange;
         var ruleTypeRadios = document.getElementsByName('ruleType');
         for (var i = 0; i < ruleTypeRadios.length; i++) {
             (<HTMLInputElement>ruleTypeRadios[i]).onclick = WebApp.ruleTypeChange;
         }
     }
+
 }
 
 window.onload = () => {

@@ -1,0 +1,25 @@
+﻿#inputForm select {
+    width: 300px;
+}
+
+#inputForm textarea {
+    height: 60px;
+    overflow: auto;
+    width: 100%;
+}
+
+#transformInput {
+    height: 180px !important;
+    width: 90% !important;
+}
+
+#inputForm #rules {
+    border: solid 1px #808080;
+    padding: 8px;
+    margin-bottom: 20px;
+}
+
+    #inputForm #rules label {
+        display: inline-block;
+        width: 160px;
+    }
