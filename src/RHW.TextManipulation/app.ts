@@ -1,8 +1,9 @@
 ﻿module StringTransform {
 
-    export enum RuleType { Remove, Replace, Insert }
+    export enum RuleType { Remove, Replace, Insert, Other, Mangle }
 
     export enum RuleLocation { Start, End, Global, BeforeSpecifiedString, AfterSpecifiedString, AtSpecificLocation, OnNewLine, FirstOccurrence, LastOccurrence }
+    export enum MangleRule { StaticText, SubString }
 
     export class DetailedLocation {
         constructor(public ruleLocation: RuleLocation = RuleLocation.Global,
@@ -248,40 +249,10 @@ module LineHelper {
 
 }
 
-module HtmlHelper {
-
-    export function hideElementsByClassName(className: string): void {
-        var locationDetailInputs = <NodeListOf<HTMLElement>>document.getElementsByClassName(className);
-        for (var i = 0; i < locationDetailInputs.length; i++) {
-            var input = locationDetailInputs[i];
-            input.classList.add('hidden');
-        }
-    }
-
-    export function showElementsByClassName(className: string): void {
-        var locationDetailInputs = <NodeListOf<HTMLElement>>document.getElementsByClassName(className);
-        for (var i = 0; i < locationDetailInputs.length; i++) {
-            var input = locationDetailInputs[i];
-            input.classList.remove('hidden');
-        }
-    }
-
-    export function getSelectedValueByName(name: string): string {
-        var ruleTypeRadios = document.getElementsByName(name);
-        for (var i = 0; i < ruleTypeRadios.length; i++) {
-            var ruleTypeRadio = <HTMLInputElement>ruleTypeRadios[i];
-            if (ruleTypeRadio.checked) {
-                return ruleTypeRadio.value;
-            }
-        }
-        return '';
-    }
-
-}
-
 module WebApp {
 
     var transformInputId: string = 'transformInput';
+    var transformButtonId: string = 'btnTransform';
 
     export class InputResult {
         constructor(public validated: boolean, public params: StringTransform.IRuleParams) {
@@ -325,7 +296,16 @@ module WebApp {
     }
 
     export function runTransformation(): boolean {
-        var ruleTypeText = HtmlHelper.getSelectedValueByName('ruleType');
+
+        var ruleTypeText = '';
+        var ruleTypeAnchors = document.getElementsByClassName('ruleType');
+        for (var i = 0; i < ruleTypeAnchors.length; i++) {
+            var ruleTypeAnchor = <HTMLAnchorElement>ruleTypeAnchors[i];
+            if (ruleTypeAnchor.classList.contains('active')) {
+                ruleTypeText = ruleTypeAnchor.dataset['mangleRule'];
+            }
+        }
+
         var ruleType = <StringTransform.RuleType>StringTransform.RuleType[ruleTypeText];
 
         var inputResult = parseInputs(ruleType);
@@ -349,30 +329,36 @@ module WebApp {
         var ruleLocationText = (<HTMLSelectElement>document.getElementById(Views.InsertView.insertRuleLocation)).value;
         HtmlHelper.hideElementsByClassName('location-details');
         var locationClassName = 'location-' + ruleLocationText;
-        HtmlHelper.showElementsByClassName(locationClassName);
+        HtmlHelper.displayElementsByClassName(locationClassName);
     }
 
     export function ruleTypeChange(): boolean {
-
-        var liWrapper = (<HTMLAnchorElement>this).parentNode;
-        var ruleTypeListItems: NodeList = liWrapper.parentNode.childNodes;
-        for (var i = 0; i < ruleTypeListItems.length; i++){
-            var childItem = <HTMLLIElement>ruleTypeListItems[i];
+        var ruleTypeAnchor = <HTMLAnchorElement>this;
+        var ruleTypeItems: NodeList = ruleTypeAnchor.parentNode.childNodes;
+        for (var i = 0; i < ruleTypeItems.length; i++) {
+            var childItem = <HTMLAnchorElement>ruleTypeItems[i];
             if (childItem && childItem.classList) {
                 childItem.classList.remove('active');
             }
         }
-        (<HTMLLIElement>liWrapper).classList.add('active');
+        ruleTypeAnchor.classList.add('active');
 
         HtmlHelper.hideElementsByClassName('field-wrapper');
         var ruleTypeText: string = this.dataset.ruletype;
         var ruleType = <StringTransform.RuleType>StringTransform.RuleType[ruleTypeText];
         var className = 'ruleType-' + ruleTypeText;
-        HtmlHelper.showElementsByClassName(className);
+        HtmlHelper.displayElementsByClassName(className);
+        HtmlHelper.hideElementById(transformButtonId);
 
         switch (ruleType) {
+            case StringTransform.RuleType.Other:
+                break;
             case StringTransform.RuleType.Insert:
+                HtmlHelper.displayElementsById(transformButtonId);
                 insertRuleLocationChange();
+                break;
+            default:
+                HtmlHelper.displayElementsById(transformButtonId);
                 break;
         }
         return false;
@@ -380,7 +366,7 @@ module WebApp {
 
     export module Views {
 
-        export enum InputType { Text, Number, TextArea, RuleLocationSelect, RemoveLocationSelect }
+        export enum InputType { Text, Number, TextArea, RuleLocationSelect, RemoveLocationSelect, Button, Div }
 
         export interface IInputView {
             inputFields: InputField[];
@@ -392,9 +378,9 @@ module WebApp {
             }
 
             appendToForm(): void {
-                var form = document.getElementById('rules');
+                var rulesWrapper = document.getElementById('rules');
                 for (var i = 0; i < this.inputFields.length; i++) {
-                    form.appendChild(this.inputFields[i].render());
+                    rulesWrapper.appendChild(this.inputFields[i].render());
                 }
             }
 
@@ -410,17 +396,28 @@ module WebApp {
         }
 
         export class InputField {
-            constructor(public ruleType: StringTransform.RuleType, public id: string, public labelText: string, public inputType: InputType, public additionalWrapperClasses: string = '') {
+            constructor(public ruleType: StringTransform.RuleType,
+                public id: string,
+                public inputType: InputType,
+                public labelText: string = '',
+                public placeHolderText: string = '',
+                public additionalWrapperClasses: string = '',
+                public buttonText: string = '',
+                public buttonClickEvent: any = null,
+                public mangleRule: StringTransform.MangleRule = null) {
             }
 
             render(): HTMLDivElement {
                 var fieldWrapper = document.createElement('div');
                 var ruleTypeText = StringTransform.RuleType[this.ruleType];
                 fieldWrapper.className = 'hidden field-wrapper ruleType-' + ruleTypeText + ' ' + this.additionalWrapperClasses;
-                var label = document.createElement('label');
-                label.htmlFor = this.id;
-                label.innerText = this.labelText;
-                fieldWrapper.appendChild(label);
+
+                if (this.labelText !== '') {
+                    var label = document.createElement('label');
+                    label.htmlFor = this.id;
+                    label.innerText = this.labelText;
+                    fieldWrapper.appendChild(label);
+                }
 
                 switch (this.inputType) {
                     case InputType.Text:
@@ -428,6 +425,7 @@ module WebApp {
                         text.className = 'form-control';
                         text.id = this.id;
                         text.type = 'text';
+                        text.placeholder = this.placeHolderText;
                         fieldWrapper.appendChild(text);
                         break;
                     case InputType.Number:
@@ -435,20 +433,23 @@ module WebApp {
                         numberText.className = 'form-control';
                         numberText.id = this.id;
                         numberText.type = 'number';
+                        numberText.placeholder = this.placeHolderText;
                         fieldWrapper.appendChild(numberText);
                         break;
                     case InputType.TextArea:
                         var textArea = document.createElement('textarea');
                         textArea.className = 'form-control';
                         textArea.id = this.id;
+                        textArea.placeholder = this.placeHolderText;
                         fieldWrapper.appendChild(textArea);
                         break;
                     case InputType.RuleLocationSelect:
                         var ruleLocationSelect = document.createElement('select');
                         ruleLocationSelect.className = 'form-control';
                         ruleLocationSelect.id = this.id;
+
                         var defaultOption = document.createElement('option');
-                        defaultOption.innerText = '--Select--';
+                        defaultOption.innerText = '--Select Location--';
                         defaultOption.value = '';
                         defaultOption.selected = true;
                         ruleLocationSelect.appendChild(defaultOption);
@@ -491,10 +492,15 @@ module WebApp {
                         removeLocationSelect.id = this.id;
 
                         var defaultRemoveOption = document.createElement('option');
-                        defaultRemoveOption.innerText = 'Anywhere/Global';
-                        defaultRemoveOption.value = StringTransform.RuleLocation[StringTransform.RuleLocation.Global];
+                        defaultRemoveOption.innerText = '--Select Location--';
+                        defaultRemoveOption.value = '';
                         defaultRemoveOption.selected = true;
                         removeLocationSelect.appendChild(defaultRemoveOption);
+
+                        var removeOptionGlobal = document.createElement('option');
+                        removeOptionGlobal.innerText = 'Anywhere/Global';
+                        removeOptionGlobal.value = StringTransform.RuleLocation[StringTransform.RuleLocation.Global];
+                        removeLocationSelect.appendChild(removeOptionGlobal);
 
                         var removeOptionFirstOcc = document.createElement('option');
                         removeOptionFirstOcc.innerText = 'First Occurrence';
@@ -507,6 +513,20 @@ module WebApp {
                         removeLocationSelect.appendChild(removeOptionLastOcc);
 
                         fieldWrapper.appendChild(removeLocationSelect);
+                        break;
+                    case InputType.Button:
+                        var btn = document.createElement('button');
+                        btn.id = this.id;
+                        btn.innerText = this.buttonText;
+                        btn.className = 'btn btn-info';
+                        btn.onclick = this.buttonClickEvent;
+                        btn.dataset['mangleRule'] = StringTransform.MangleRule[this.mangleRule];
+                        fieldWrapper.appendChild(btn);
+                        break;
+                    case InputType.Div:
+                        var div = document.createElement('div');
+                        div.id = this.id;
+                        fieldWrapper.appendChild(div);
                         break;
                 }
 
@@ -533,9 +553,9 @@ module WebApp {
             static removeRuleLocation: string = 'removeRuleLocation';
             constructor() {
                 super(StringTransform.RuleType.Remove);
-                var removeLocationSelect = new InputField(this.ruleType, RemoveView.removeRuleLocation, 'Location:', InputType.RemoveLocationSelect);
+                var removeLocationSelect = new InputField(this.ruleType, RemoveView.removeRuleLocation, InputType.RemoveLocationSelect);
                 this.inputFields.push(removeLocationSelect);
-                var removeStringField = new InputField(this.ruleType, this.removeText, 'Remove This Text:', InputType.TextArea);
+                var removeStringField = new InputField(this.ruleType, this.removeText, InputType.TextArea, '', 'Remove This Text');
                 this.inputFields.push(removeStringField);
             }
         }
@@ -545,9 +565,9 @@ module WebApp {
             replaceWithText: string = 'replaceWithText';
             constructor() {
                 super(StringTransform.RuleType.Replace);
-                var replaceStringField = new InputField(this.ruleType, this.replaceText, 'Replace This Text:', InputType.TextArea);
+                var replaceStringField = new InputField(this.ruleType, this.replaceText, InputType.TextArea, '', 'Replace This Text');
                 this.inputFields.push(replaceStringField);
-                var replaceWithStringField = new InputField(this.ruleType, this.replaceWithText, 'Replace With:', InputType.TextArea);
+                var replaceWithStringField = new InputField(this.ruleType, this.replaceWithText, InputType.TextArea, '', 'With This Text');
                 this.inputFields.push(replaceWithStringField);
             }
         }
@@ -561,31 +581,142 @@ module WebApp {
             insertNewLinesAfterText: string = 'insertNewLinesAfterText';
             constructor() {
                 super(StringTransform.RuleType.Insert);
-                var insertStringField = new InputField(this.ruleType, this.insertText, 'Insert This Text:', InputType.TextArea);
+                var insertStringField = new InputField(this.ruleType, this.insertText, InputType.TextArea, '', 'Insert This Text');
                 this.inputFields.push(insertStringField);
 
-                var ruleLocationSelect = new InputField(this.ruleType, InsertView.insertRuleLocation, 'Location:', InputType.RuleLocationSelect);
+                var ruleLocationSelect = new InputField(this.ruleType, InsertView.insertRuleLocation, InputType.RuleLocationSelect, '', 'Location:');
                 this.inputFields.push(ruleLocationSelect);
 
                 var classBase = 'hidden location-details location-';
                 var classBefore = classBase + StringTransform.RuleLocation[StringTransform.RuleLocation.BeforeSpecifiedString];
-                var insertBeforeString = new InputField(this.ruleType, this.insertBeforeText, 'Insert Before This Text:', InputType.TextArea, classBefore);
+                var insertBeforeString = new InputField(this.ruleType, this.insertBeforeText, InputType.TextArea, '', 'Insert Before This Text', classBefore);
                 this.inputFields.push(insertBeforeString);
 
                 var classAfter = classBase + StringTransform.RuleLocation[StringTransform.RuleLocation.AfterSpecifiedString];
-                var insertAfterString = new InputField(this.ruleType, this.insertAfterText, 'Insert After This Text:', InputType.TextArea, classAfter);
+                var insertAfterString = new InputField(this.ruleType, this.insertAfterText, InputType.TextArea, '', 'Insert After This Text', classAfter);
                 this.inputFields.push(insertAfterString);
 
                 var classAt = classBase + StringTransform.RuleLocation[StringTransform.RuleLocation.AtSpecificLocation];
-                var insertAtLoc = new InputField(this.ruleType, this.insertLocation, 'Insert At This Location:', InputType.Number, classAt);
+                var insertAtLoc = new InputField(this.ruleType, this.insertLocation, InputType.Number, '', 'Insert At This Location', classAt);
                 this.inputFields.push(insertAtLoc);
 
                 var classOnNewLine = classBase + StringTransform.RuleLocation[StringTransform.RuleLocation.OnNewLine];
-                var insertOnNewLine = new InputField(this.ruleType, this.insertNewLinesAfterText, 'Insert After Lines That End With:', InputType.TextArea, classOnNewLine);
+                var insertOnNewLine = new InputField(this.ruleType, this.insertNewLinesAfterText, InputType.TextArea, '', 'Insert After Lines That End With', classOnNewLine);
                 this.inputFields.push(insertOnNewLine);
             }
         }
 
+        export class OtherView extends BaseView {
+            static trimLinesId: string = 'btnTrimLines';
+            static formatJSONId: string = 'btnFormatJSON';
+            constructor() {
+                super(StringTransform.RuleType.Other);
+                var btnTrim = new InputField(this.ruleType, OtherView.trimLinesId, InputType.Button, '', '', '', 'Trim', QuickRules.runTrimLines);
+                this.inputFields.push(btnTrim);
+                var btnFormatJSON = new InputField(this.ruleType, OtherView.formatJSONId, InputType.Button, '', '', '', 'Format JSON', QuickRules.formatJSON);
+                this.inputFields.push(btnFormatJSON);
+            }
+        }
+
+        export class MangleView extends BaseView {
+            static btnStaticTextId = 'btnMangleStaticText';
+            static mangleRulesWrapperId = 'mangleRulesWrapper';
+            constructor() {
+                super(StringTransform.RuleType.Mangle);
+
+                var btnStaticText = new InputField(this.ruleType, MangleView.btnStaticTextId, InputType.Button,
+                    '', '', '', 'Static Text', addMangleRule, StringTransform.MangleRule.StaticText);
+                this.inputFields.push(btnStaticText);
+
+                var btnSubString = new InputField(this.ruleType, MangleView.btnStaticTextId, InputType.Button,
+                    '', '', '', 'SubString', addMangleRule, StringTransform.MangleRule.SubString);
+                this.inputFields.push(btnSubString);
+
+                var mangleRuleWrapper = new InputField(this.ruleType, MangleView.mangleRulesWrapperId, InputType.Div);
+                this.inputFields.push(mangleRuleWrapper);
+            }
+        }
+
+        export function addMangleRule(): boolean {
+            var btn = <HTMLButtonElement>this;
+            var mangleRule = StringTransform.MangleRule[<string>btn.dataset['mangleRule']];
+            var mangleRulesWrapper = document.getElementById(MangleView.mangleRulesWrapperId);
+            var singleRuleWrapper = document.createElement('div');
+            singleRuleWrapper.className = 'rule-wrapper';
+            switch (mangleRule) {
+                case StringTransform.MangleRule.StaticText:
+                    var txtStaticText = document.createElement('input');
+                    txtStaticText.type = 'text';
+                    txtStaticText.placeholder = 'Static Text';
+                    singleRuleWrapper.appendChild(txtStaticText);
+                    break;
+                case StringTransform.MangleRule.SubString:
+                    var txtStartText = document.createElement('input');
+                    txtStartText.type = 'text';
+                    txtStartText.className = '';
+                    txtStartText.placeholder = 'Start At This Text';
+                    singleRuleWrapper.appendChild(txtStartText);
+                    var txtEndText = document.createElement('input');
+                    txtEndText.type = 'text';
+                    txtEndText.className = '';
+                    txtEndText.placeholder = 'End At This Text';
+                    singleRuleWrapper.appendChild(txtEndText);
+                    var txtStartIndex = document.createElement('input');
+                    txtStartIndex.type = 'text';
+                    txtStartIndex.className = 'short';
+                    txtStartIndex.placeholder = 'Start Index';
+                    singleRuleWrapper.appendChild(txtStartIndex);
+                    var txtEndIndex = document.createElement('input');
+                    txtEndIndex.type = 'text';
+                    txtEndIndex.className = 'short';
+                    txtEndIndex.placeholder = 'End Index';
+                    singleRuleWrapper.appendChild(txtEndIndex);
+                    break;
+            }
+            var anchorRemove = document.createElement('a');
+            anchorRemove.href = '#';
+            anchorRemove.innerText = 'X';
+            anchorRemove.onclick = removeMangleRule;
+            singleRuleWrapper.appendChild(anchorRemove);
+            mangleRulesWrapper.appendChild(singleRuleWrapper);
+            return false;
+        }
+
+        export function removeMangleRule(): boolean {
+            var anchor = <HTMLAnchorElement>this;
+            var singleRuleWrapper = <HTMLDivElement>anchor.parentNode;
+            singleRuleWrapper.removeNode(true);
+            return false;
+        }
+
+    }
+
+    function render() {
+        var removeView = new Views.RemoveView();
+        removeView.appendToForm();
+
+        var replaceView = new Views.ReplaceView();
+        replaceView.appendToForm();
+
+        var insertView = new Views.InsertView();
+        insertView.appendToForm();
+
+        var mangleView = new Views.MangleView();
+        mangleView.appendToForm();
+
+        var otherView = new Views.OtherView();
+        otherView.appendToForm();
+    }
+
+    export function setup() {
+        render();
+
+        document.getElementById(transformButtonId).onclick = WebApp.runTransformation;
+        document.getElementById(Views.InsertView.insertRuleLocation).onchange = WebApp.insertRuleLocationChange;
+        var ruleTypeItems = document.getElementsByClassName('ruleType');
+        for (var i = 0; i < ruleTypeItems.length; i++) {
+            (<HTMLAnchorElement>ruleTypeItems[i]).onclick = WebApp.ruleTypeChange;
+        }
     }
 
     export module QuickRules {
@@ -605,29 +736,45 @@ module WebApp {
 
     }
 
-    function render() {
+    module HtmlHelper {
 
-        var removeView = new Views.RemoveView();
-        removeView.appendToForm();
+        var hiddenClass: string = 'hidden';
 
-        var replaceView = new Views.ReplaceView();
-        replaceView.appendToForm();
+        export function hideElementById(id: string): void {
+            var element = document.getElementById(id);
+            element.classList.add(hiddenClass);
+        }
 
-        var insertView = new Views.InsertView();
-        insertView.appendToForm();
+        export function displayElementsById(id: string): void {
+            var element = document.getElementById(id);
+            element.classList.remove(hiddenClass);
+        }
 
-    }
+        export function hideElementsByClassName(className: string): void {
+            var locationDetailInputs = <NodeListOf<HTMLElement>>document.getElementsByClassName(className);
+            for (var i = 0; i < locationDetailInputs.length; i++) {
+                var input = locationDetailInputs[i];
+                input.classList.add(hiddenClass);
+            }
+        }
 
-    export function setup() {
-        render();
-        document.getElementById('btnTrimLines').onclick = QuickRules.runTrimLines;
-        document.getElementById('btnFormatJSON').onclick = QuickRules.formatJSON;
+        export function displayElementsByClassName(className: string): void {
+            var locationDetailInputs = <NodeListOf<HTMLElement>>document.getElementsByClassName(className);
+            for (var i = 0; i < locationDetailInputs.length; i++) {
+                var input = locationDetailInputs[i];
+                input.classList.remove(hiddenClass);
+            }
+        }
 
-        document.getElementById(Views.InsertView.insertRuleLocation).onchange = WebApp.insertRuleLocationChange;
-
-        var ruleTypeItems = document.getElementsByClassName('ruleType');
-        for (var i = 0; i < ruleTypeItems.length; i++) {
-            (<HTMLAnchorElement>ruleTypeItems[i]).onclick = WebApp.ruleTypeChange;
+        export function getSelectedValueByName(name: string): string {
+            var ruleTypeRadios = document.getElementsByName(name);
+            for (var i = 0; i < ruleTypeRadios.length; i++) {
+                var ruleTypeRadio = <HTMLInputElement>ruleTypeRadios[i];
+                if (ruleTypeRadio.checked) {
+                    return ruleTypeRadio.value;
+                }
+            }
+            return '';
         }
 
     }
